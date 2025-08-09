@@ -7,11 +7,11 @@
   <title>KCRW Sponsorship Copy Generator</title>
   <style>
     :root { --bg:#f6f7fb; --card:#fff; --text:#1f2937; --muted:#6b7280; --primary:#111827; --border:#e5e7eb; }
-    *{box-sizing:border-box} html,body{height:100%} body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:var(--bg)}
+    *{box-sizing:border-box} html,body{height:100%} body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:#f6f7fb}
     .container{max-width:1100px;margin:0 auto;padding:24px}
     .header h1{margin:0 0 4px;font-size:24px;font-weight:700}
     .header p{margin:0;color:var(--muted);font-size:14px}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.04)}
+    .card{background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.04)}
     .card-header{padding:16px 18px;border-bottom:1px solid var(--border)}
     .card-title{font-weight:600}
     .card-content{padding:18px}
@@ -21,19 +21,19 @@
     .label{font-size:14px;font-weight:600}
     .input{width:100%;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;color:var(--text)}
     .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    .btn{border:1px solid var(--border);background:var(--primary);color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
-    .btn.secondary{background:#fff;color:var(--text)}
-    .badge{font-size:12px;color:var(--muted)}
+    .btn{border:1px solid var(--border);background:#111827;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+    .btn.secondary{background:#fff;color:#1f2937}
+    .badge{font-size:12px;color:#6b7280}
     .options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
     @media (max-width:900px){.options{grid-template-columns:1fr}}
     .option{line-height:1.6;font-size:14px;white-space:pre-wrap}
-    .wordcount{color:var(--muted);font-size:12px;margin-left:6px}
-    .footer{font-size:12px;color:var(--muted);padding:16px 0}
+    .wordcount{color:#6b7280;font-size:12px;margin-left:6px}
+    .footer{font-size:12px;color:#6b7280;padding:16px 0}
     .error{color:#b91c1c;font-size:14px}
     .checkbox-card{padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff}
-    .checkbox-card h4{margin:0 0 4px;font-size:14px}
-    .loading{font-size:13px;color:var(--muted)}
-    .source{font-size:12px;color:var(--muted)}
+    .loading{font-size:13px;color:#6b7280}
+    .source{font-size:12px;color:#6b7280}
+    .debug{font-size:12px;color:#6b7280;margin-top:8px}
   </style>
 </head>
 <body>
@@ -102,7 +102,6 @@
     function containsBanned(text,nonprofit){const lower=` ${text.toLowerCase()} `;if(hasDollarAmount(lower))return{ok:false,reason:"Contains a dollar amount."};for(const term of bannedGeneral){if(lower.includes(term))return{ok:false,reason:`Contains banned term: \"${term}\".`}}for(const term of bannedAwardsPhrases){const re=new RegExp(`\\b${term}\\b`,"i");if(re.test(lower)&&!/nominat/i.test(lower))return{ok:false,reason:`References ${term}.`}}if(nonprofit){for(const term of bannedNonprofit){if(lower.includes(term))return{ok:false,reason:`Nonprofit rule: avoid pronoun or word: ${term.trim()}.`}}}const maxListItemsOk=lower.split(",").length-1<=3;if(!maxListItemsOk)return{ok:false,reason:"Avoid lists longer than four items."};return{ok:true}}
     function trimToWordRange(text,min,max){let words=text.trim().split(/\s+/);if(words.length<=max&&words.length>=min)return words.join(" ");if(words.length>max){let s=text.replace(/\s*\([^)]*\)\s*/g," ").replace(/, [^,]+(?=\.|$)/,"");words=s.trim().split(/\s+/);if(words.length>max){words=words.slice(0,max);if(!/[\.!?]$/.test(words[words.length-1]))words.push(".")}return words.join(" ")}while(words.length<min){words.push("including")}return words.join(" ")}
     function openers(isNonprofit, name){return isNonprofit?`Support comes from ${name}`:`KCRW sponsors include ${name}`;}
-
     async function fetchFacts(name, website){
       const params = new URLSearchParams({ sponsor: name, website });
       const url = '/.netlify/functions/scrape?' + params.toString();
@@ -110,7 +109,6 @@
       if(!res.ok) throw new Error('Backend error');
       return res.json();
     }
-
     function composeOptions(name, website, isNonprofit, facts){
       const site = sanitizeWebsite(website);
       const opener = openers(isNonprofit, name);
@@ -126,22 +124,28 @@
       ];
       return variants;
     }
-
     async function generate(name, website, isNonprofit){
       const { facts, sources } = await fetchFacts(name, website);
       const rawOptions = composeOptions(name, website, isNonprofit, facts);
       const range = isNonprofit ? [65,80] : [32,40];
       const passing = [];
-      for(const raw of rawOptions){
-        let text = removeEmDashes(raw);
-        text = text.replace(/\s+/g," ").replace(/\s+([,.:;\)])/g,"$1").trim();
-        if(!endsWithPunctuation(text)) text += ".";
+      const fillers = isNonprofit? ["providing","supporting","serving","advancing","promoting"] : ["offering","presenting","providing","featuring","highlighting"];
+      const baseFacts = facts.length ? facts.join(", ") : "public information available online";
+      for (let attempt=0; attempt<24; attempt++){
+        const template = attempt < rawOptions.length
+          ? rawOptions[attempt]
+          : (isNonprofit
+            ? `Support comes from ${name}, ${fillers[attempt % fillers.length]} ${baseFacts}. ${sanitizeWebsite(website)}`
+            : `KCRW sponsors include ${name}, ${fillers[attempt % fillers.length]} ${baseFacts}. ${sanitizeWebsite(website)}`);
+        let text = template.replace(/\s+/g," ").replace(/\s+([,.:;\)])/g,"$1").trim();
+        if(!/[\.!?]$/.test(text)) text += ".";
         text = trimToWordRange(text, range[0], range[1]);
         const { ok } = containsBanned(text, isNonprofit);
         const words = countWords(text);
         if(ok && words>=range[0] && words<=range[1]) passing.push({ text, words });
+        if(passing.length>=3) break;
       }
-      return { options: passing.slice(0,3), sources };
+      return { options: passing.slice(0,3), sources, facts };
     }
 
     const sponsor=document.getElementById("sponsor");
@@ -161,13 +165,14 @@
       const name=sponsor.value.trim(); const web=website.value.trim();
       if(!name){ errorBox.textContent="Please enter a sponsor/nonprofit name."; errorBox.style.display="block"; return; }
       if(!web){ errorBox.textContent="Please enter a website or domain."; errorBox.style.display="block"; return; }
-
       loading.style.display = "inline";
       try{
-        const { options, sources } = await generate(name, web, nonprofit.checked && !forprofit.checked);
+        const { options, sources, facts } = await generate(name, web, nonprofit.checked && !forprofit.checked);
         if(options.length<3){
-          errorBox.textContent="I couldn't build three fully compliant options from sources. Try a more specific sponsor name or confirm the website.";
+          errorBox.textContent="I couldn't build three fully compliant options from sources. The function tried multiple sources and permutations.";
           errorBox.style.display="block";
+          const dbg = document.createElement("div"); dbg.className="debug"; dbg.textContent = "Fetched facts: " + (facts && facts.length ? facts.join(" • ") : "none");
+          errorBox.appendChild(dbg);
         }
         if(options.length){
           const wrap=document.createElement("div"); wrap.style.marginTop="16px";
@@ -187,15 +192,14 @@
             btnRow.appendChild(btn); cc.appendChild(btnRow);
             card.appendChild(cc); grid.appendChild(card);
           });
-          // Sources
           const src = document.createElement("div"); src.style.marginTop="12px"; src.className="source";
-          src.textContent = "Sources: " + sources.map(s=>s.url).join(" • ");
+          src.textContent = "Sources: " + (sources && sources.length ? sources.map(s=>s.url).join(" • ") : "none");
           wrap.appendChild(src);
           results.appendChild(wrap);
         }
       }catch(e){
         console.error(e);
-        errorBox.textContent="Backend fetch failed. Once deployed with Netlify (not Drop), the function will work.";
+        errorBox.textContent="Backend fetch failed. If this persists, the function may need CORS allowances or a different source.";
         errorBox.style.display="block";
       } finally {
         loading.style.display = "none";
