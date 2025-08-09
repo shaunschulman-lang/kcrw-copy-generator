@@ -1,0 +1,206 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KCRW Sponsorship Copy Generator</title>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --text:#1f2937; --muted:#6b7280; --primary:#111827; --border:#e5e7eb; }
+    *{box-sizing:border-box} html,body{height:100%} body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:var(--bg)}
+    .container{max-width:1100px;margin:0 auto;padding:24px}
+    .header h1{margin:0 0 4px;font-size:24px;font-weight:700}
+    .header p{margin:0;color:var(--muted);font-size:14px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.04)}
+    .card-header{padding:16px 18px;border-bottom:1px solid var(--border)}
+    .card-title{font-weight:600}
+    .card-content{padding:18px}
+    .grid{display:grid;gap:16px}
+    .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    @media (max-width:760px){.grid-2{grid-template-columns:1fr}}
+    .label{font-size:14px;font-weight:600}
+    .input{width:100%;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;color:var(--text)}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .btn{border:1px solid var(--border);background:var(--primary);color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+    .btn.secondary{background:#fff;color:var(--text)}
+    .badge{font-size:12px;color:var(--muted)}
+    .options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+    @media (max-width:900px){.options{grid-template-columns:1fr}}
+    .option{line-height:1.6;font-size:14px;white-space:pre-wrap}
+    .wordcount{color:var(--muted);font-size:12px;margin-left:6px}
+    .footer{font-size:12px;color:var(--muted);padding:16px 0}
+    .error{color:#b91c1c;font-size:14px}
+    .checkbox-card{padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff}
+    .checkbox-card h4{margin:0 0 4px;font-size:14px}
+    .loading{font-size:13px;color:var(--muted)}
+    .source{font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>KCRW Sponsorship Copy Generator</h1>
+      <p>Auto-generates FCC-compliant sponsor copy using public sources via a secure backend.</p>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><div class="card-title">Inputs</div></div>
+      <div class="card-content">
+        <div class="grid">
+          <div>
+            <div class="label">Sponsor</div>
+            <input id="sponsor" class="input" placeholder="e.g., Studio X">
+          </div>
+          <div>
+            <div class="label">Website</div>
+            <input id="website" class="input" placeholder="e.g., studiox.com">
+          </div>
+          <div class="grid grid-2" style="padding:12px;background:#fff;border:1px solid var(--border);border-radius:12px">
+            <div class="checkbox-card">
+              <div class="row">
+                <input id="forprofit" type="checkbox" checked>
+                <div>
+                  <label for="forprofit"><strong>For Profit Company</strong></label>
+                  <div class="badge">Generates 32-40 words starting with "KCRW sponsors include..."</div>
+                </div>
+              </div>
+            </div>
+            <div class="checkbox-card">
+              <div class="row">
+                <input id="nonprofit" type="checkbox">
+                <div>
+                  <label for="nonprofit"><strong>Nonprofit Organization</strong></label>
+                  <div class="badge">Generates 70-80 words starting with "Support comes from..."</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <button id="generate" class="btn">Generate 3 Options</button>
+            <div id="desc" class="badge">Generates 32-40 words starting with "KCRW sponsors include..."</div>
+            <div id="loading" class="loading" style="display:none">Gathering info…</div>
+          </div>
+          <div id="error" class="error" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="results"></div>
+
+    <div class="footer">Built for KCRW sponsorship copy prototyping.</div>
+  </div>
+
+  <script>
+    function countWords(text){return text.replace(/—/g," ").trim().split(/\s+/).filter(Boolean).length}
+    function endsWithPunctuation(s){return /[\.!?]$/.test(s)}
+    function sanitizeWebsite(url){const t=url.trim();if(!t)return"";try{const u=new URL(t.startsWith("http")?t:"https://"+t);return u.hostname+(u.pathname==="/"?"":u.pathname)}catch(e){return t.replace(/^https?:\/\//,"")}}
+    function removeEmDashes(text){return text.replace(/—/g,", ")}
+    const bannedGeneral=["best","premier","premiere","leading","world-class","unmatched","ultimate","critically acclaimed","award-winning","award winning","acclaimed","go see","visit "," call ","sign up","subscribe","donate now","buy now","shop now","learn more","discount","deal","sale","promo","limited time","save","offer","special","free trial","free shipping","early entry","act now","$","percent off","% off","dollars","price","priced","original series as sponsor"];
+    const bannedAwardsPhrases=["award","awards","accolade","winner","winning"];
+    const bannedNonprofit=[" free "," we "," our "," your "," you "];
+    function hasDollarAmount(text){return/(\$\s*\d|\d+\s*(dollars|usd))/i.test(text)}
+    function containsBanned(text,nonprofit){const lower=` ${text.toLowerCase()} `;if(hasDollarAmount(lower))return{ok:false,reason:"Contains a dollar amount."};for(const term of bannedGeneral){if(lower.includes(term))return{ok:false,reason:`Contains banned term: \"${term}\".`}}for(const term of bannedAwardsPhrases){const re=new RegExp(`\\b${term}\\b`,"i");if(re.test(lower)&&!/nominat/i.test(lower))return{ok:false,reason:`References ${term}.`}}if(nonprofit){for(const term of bannedNonprofit){if(lower.includes(term))return{ok:false,reason:`Nonprofit rule: avoid pronoun or word: ${term.trim()}.`}}}const maxListItemsOk=lower.split(",").length-1<=3;if(!maxListItemsOk)return{ok:false,reason:"Avoid lists longer than four items."};return{ok:true}}
+    function trimToWordRange(text,min,max){let words=text.trim().split(/\s+/);if(words.length<=max&&words.length>=min)return words.join(" ");if(words.length>max){let s=text.replace(/\s*\([^)]*\)\s*/g," ").replace(/, [^,]+(?=\.|$)/,"");words=s.trim().split(/\s+/);if(words.length>max){words=words.slice(0,max);if(!/[\.!?]$/.test(words[words.length-1]))words.push(".")}return words.join(" ")}while(words.length<min){words.push("including")}return words.join(" ")}
+    function openers(isNonprofit, name){return isNonprofit?`Support comes from ${name}`:`KCRW sponsors include ${name}`;}
+
+    async function fetchFacts(name, website){
+      const params = new URLSearchParams({ sponsor: name, website });
+      const url = '/.netlify/functions/scrape?' + params.toString();
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('Backend error');
+      return res.json();
+    }
+
+    function composeOptions(name, website, isNonprofit, facts){
+      const site = sanitizeWebsite(website);
+      const opener = openers(isNonprofit, name);
+      const baseFacts = facts.length ? facts.join(", ") : "public information available online";
+      const variants = isNonprofit ? [
+        `${opener}, supporting ${baseFacts}. Details at ${site}.`,
+        `${opener}: advancing ${baseFacts}. More information at ${site}.`,
+        `${opener} (focused on ${baseFacts}). Information at ${site}.`
+      ] : [
+        `${opener}, highlighting ${baseFacts}. ${site}`,
+        `${opener}: offering ${baseFacts}. ${site}`,
+        `${opener} (with ${baseFacts}). ${site}`
+      ];
+      return variants;
+    }
+
+    async function generate(name, website, isNonprofit){
+      const { facts, sources } = await fetchFacts(name, website);
+      const rawOptions = composeOptions(name, website, isNonprofit, facts);
+      const range = isNonprofit ? [65,80] : [32,40];
+      const passing = [];
+      for(const raw of rawOptions){
+        let text = removeEmDashes(raw);
+        text = text.replace(/\s+/g," ").replace(/\s+([,.:;\)])/g,"$1").trim();
+        if(!endsWithPunctuation(text)) text += ".";
+        text = trimToWordRange(text, range[0], range[1]);
+        const { ok } = containsBanned(text, isNonprofit);
+        const words = countWords(text);
+        if(ok && words>=range[0] && words<=range[1]) passing.push({ text, words });
+      }
+      return { options: passing.slice(0,3), sources };
+    }
+
+    const sponsor=document.getElementById("sponsor");
+    const website=document.getElementById("website");
+    const forprofit=document.getElementById("forprofit");
+    const nonprofit=document.getElementById("nonprofit");
+    const results=document.getElementById("results");
+    const errorBox=document.getElementById("error");
+    const desc=document.getElementById("desc");
+    const loading=document.getElementById("loading");
+
+    forprofit.addEventListener("change",()=>{ if(forprofit.checked){ nonprofit.checked=false; desc.textContent='Generates 32-40 words starting with "KCRW sponsors include..."'; } else { desc.textContent='Generates 70-80 words starting with "Support comes from..."'; } });
+    nonprofit.addEventListener("change",()=>{ if(nonprofit.checked){ forprofit.checked=false; desc.textContent='Generates 70-80 words starting with "Support comes from..."'; } else { desc.textContent='Generates 32-40 words starting with "KCRW sponsors include..."'; } });
+
+    document.getElementById("generate").addEventListener("click", async ()=>{
+      errorBox.style.display="none"; results.innerHTML="";
+      const name=sponsor.value.trim(); const web=website.value.trim();
+      if(!name){ errorBox.textContent="Please enter a sponsor/nonprofit name."; errorBox.style.display="block"; return; }
+      if(!web){ errorBox.textContent="Please enter a website or domain."; errorBox.style.display="block"; return; }
+
+      loading.style.display = "inline";
+      try{
+        const { options, sources } = await generate(name, web, nonprofit.checked && !forprofit.checked);
+        if(options.length<3){
+          errorBox.textContent="I couldn't build three fully compliant options from sources. Try a more specific sponsor name or confirm the website.";
+          errorBox.style.display="block";
+        }
+        if(options.length){
+          const wrap=document.createElement("div"); wrap.style.marginTop="16px";
+          const h2=document.createElement("h2"); h2.textContent="Compliant Options"; wrap.appendChild(h2);
+          const grid=document.createElement("div"); grid.className="options"; wrap.appendChild(grid);
+          options.forEach((r,i)=>{
+            const card=document.createElement("div"); card.className="card";
+            const ch=document.createElement("div"); ch.className="card-header";
+            const ct=document.createElement("div"); ct.className="card-title"; ct.textContent=`Option ${i+1} `;
+            const wc=document.createElement("span"); wc.className="wordcount"; wc.textContent=`(${r.words} words)`; ct.appendChild(wc);
+            ch.appendChild(ct); card.appendChild(ch);
+            const cc=document.createElement("div"); cc.className="card-content";
+            const p=document.createElement("div"); p.className="option"; p.textContent=r.text; cc.appendChild(p);
+            const btnRow=document.createElement("div"); btnRow.style.marginTop="12px";
+            const btn=document.createElement("button"); btn.className="btn secondary"; btn.textContent="Copy";
+            btn.addEventListener("click",()=>navigator.clipboard.writeText(r.text));
+            btnRow.appendChild(btn); cc.appendChild(btnRow);
+            card.appendChild(cc); grid.appendChild(card);
+          });
+          // Sources
+          const src = document.createElement("div"); src.style.marginTop="12px"; src.className="source";
+          src.textContent = "Sources: " + sources.map(s=>s.url).join(" • ");
+          wrap.appendChild(src);
+          results.appendChild(wrap);
+        }
+      }catch(e){
+        console.error(e);
+        errorBox.textContent="Backend fetch failed. Once deployed with Netlify (not Drop), the function will work.";
+        errorBox.style.display="block";
+      } finally {
+        loading.style.display = "none";
+      }
+    });
+  </script>
+</body>
+</html>
